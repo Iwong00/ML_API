@@ -1,39 +1,49 @@
 import numpy as np
 from flask import Flask, request, jsonify, render_template
 import pickle
-import pandas as pd  # PERLU: untuk membuat DataFrame
+import pandas as pd
 
-flask_app = Flask(__name__)
+# Ganti nama variabel menjadi 'app' (bukan 'flask_app')
+app = Flask(__name__)
 
-# PERUBAHAN 1: Load transformer juga!
+# Load model and transformer
 model = pickle.load(open("linear_regression_model.pkl", "rb"))
-transformer = pickle.load(open("transformer.pkl", "rb"))  # <-- INI PENTING!
+transformer = pickle.load(open("transformer.pkl", "rb"))
 
-@flask_app.route("/")
+@app.route("/")
 def home():
     return render_template("index.html")
 
-@flask_app.route("/predict", methods=["POST"])
+@app.route("/predict", methods=["POST"])
 def predict():
-    # PERUBAHAN 2: Ambil data sesuai format asli
-    age = float(request.form.get('Age'))
-    gender = request.form.get('Gender')
-    blood_type = request.form.get('Blood Type')
-    medical_condition = request.form.get('Medical Condition')
+    try:
+        data = request.get_json()
+        
+        age = float(data['Age'])
+        gender = data['Gender']
+        blood_type = data['Blood Type']
+        medical_condition = data['Medical Condition']
+        
+        input_data = pd.DataFrame({
+            'Age': [age],
+            'Gender': [gender],
+            'Blood Type': [blood_type],
+            'Medical Condition': [medical_condition]
+        })
+        
+        transformed_input = transformer.transform(input_data)
+        prediction = model.predict(transformed_input)
+        
+        return jsonify({
+            'success': True,
+            'predicted_amount': float(prediction[0])
+        })
     
-    # PERUBAHAN 3: Buat DataFrame seperti waktu training
-    input_data = pd.DataFrame({
-        'Age': [age],
-        'Gender': [gender],
-        'Blood Type': [blood_type],
-        'Medical Condition': [medical_condition]
-    })
-    
-    # PERUBAHAN 4: Transform data (one-hot encoding)
-    transformed_input = transformer.transform(input_data)  # <-- INI PENTING!
-    
-    # PERUBAHAN 5: Prediksi
-    prediction = model.predict(transformed_input)
-    
-    return render_template("index.html", 
-                          prediction_text=f"Predicted Billing Amount: ${prediction[0]:,.2f}")
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 400
+
+if __name__ == "__main__":
+    app.run(debug=True)
